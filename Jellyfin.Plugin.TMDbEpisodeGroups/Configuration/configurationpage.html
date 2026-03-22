@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TMDb Episode Groups</title>
+</head>
+<body>
+    <div data-role="page" class="page type-interior pluginConfigurationPage tbsConfigurationPage" data-require="emby-input,emby-button,emby-select">
+        <div data-role="content">
+            <div class="content-primary">
+                <form class="tbsConfigurationPage">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h2 class="sectionTitle">TMDb Episode Groups</h2>
+                    </div>
+                    <div class="verticalSection">
+                        <p>This plugin updates episode metadata from TMDb episode groups. Configure your TMDB API key below, then select episode groups for your TV series.</p>
+                        <br/>
+                    </div>
+                    <h3>Episode Group Metadata</h3>
+                    <div class="verticalSection">
+                        <p>Configure episode groups to use alternate episode titles and descriptions from TMDB (e.g., DVD order, production order).</p>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="tmdb-api-key">TMDB API Key</label>
+                        <input type="text" id="tmdb-api-key" name="tmdb-api-key" is="emby-input"/>
+                        <div class="fieldDescription">
+                            Required for fetching episode group data. Get your API key from <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB Settings</a>.
+                        </div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="cache-expiration-hours">Cache Expiration (hours)</label>
+                        <input type="number" id="cache-expiration-hours" name="cache-expiration-hours" is="emby-input" min="1" max="8760"/>
+                        <div class="fieldDescription">
+                            How long to cache fetched TMDB episode group data before re-fetching. Default is 24 hours. Set higher to reduce API calls or lower to pick up TMDB changes sooner.
+                        </div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="series-selector">Select Series</label>
+                        <select id="series-selector" is="emby-select" class="emby-select-withcolor emby-select"></select>
+                        <div class="fieldDescription">
+                            Choose a series to configure its episode group.
+                        </div>
+                    </div>
+                    <div id="episode-group-config" style="display:none;">
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="episode-group-selector">Episode Group</label>
+                            <select id="episode-group-selector" is="emby-select" class="emby-select-withcolor emby-select"></select>
+                            <div class="fieldDescription">
+                                Select the episode group to use for metadata.
+                            </div>
+                        </div>
+                        <button is="emby-button" type="button" class="raised" id="save-episode-group"><span>Save Episode Group</span></button>
+                        <button is="emby-button" type="button" class="raised button-alt" id="refresh-episode-metadata"><span>Refresh Episode Metadata</span></button>
+                        <button is="emby-button" type="button" class="raised" id="warm-cache"><span>Refresh TMDB Data</span></button>
+                    </div>
+                    <br/>
+                    <br/>
+                    <button is="emby-button" type="submit" class="raised button-submit block"><span>${Save}</span></button>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            console.log('[TMDbEpisodeGroups] Configuration page script loaded');
+            
+            var TMDbEpisodeGroupsConfig = {
+                pluginId: "7e0a7d42-3f8c-4b9e-a1f2-5d8c9e6f4a3b",
+                allSeries: [],
+
+                loadConfiguration: function () {
+                    console.log('[TMDbEpisodeGroups] Loading configuration page');
+                    Dashboard.showLoadingMsg();
+
+                    ApiClient.getPluginConfiguration(TMDbEpisodeGroupsConfig.pluginId).then(function (config) {
+                        document.getElementById('tmdb-api-key').value = config.TmdbApiKey || "";
+                        document.getElementById('cache-expiration-hours').value = config.CacheExpirationHours || 24;
+
+                        console.log('[TMDbEpisodeGroups] Configuration loaded, loading series list');
+                        TMDbEpisodeGroupsConfig.loadSeriesList();
+
+                        Dashboard.hideLoadingMsg();
+                    }).catch(function(error) {
+                        console.error('[TMDbEpisodeGroups] Error loading plugin configuration:', error);
+                        Dashboard.hideLoadingMsg();
+                    });
+                },
+
+                loadSeriesList: function() {
+                    console.log('[TMDbEpisodeGroups] Fetching TV series from Jellyfin');
+                    ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                        IncludeItemTypes: 'Series',
+                        Recursive: true,
+                        Fields: 'ProviderIds'
+                    }).then(function(result) {
+                        TMDbEpisodeGroupsConfig.allSeries = result.Items;
+                        var seriesSelector = document.getElementById('series-selector');
+                        seriesSelector.innerHTML = '<option value="">-- Select a Series --</option>';
+                        
+                        result.Items.forEach(function(series) {
+                            var option = document.createElement('option');
+                            option.value = series.Id;
+                            option.textContent = series.Name;
+                            if (series.ProviderIds && series.ProviderIds.Tmdb) {
+                                option.setAttribute('data-tmdb-id', series.ProviderIds.Tmdb);
+                            }
+                            seriesSelector.appendChild(option);
+                        });
+                        
+                        console.log('[TMDbEpisodeGroups] Loaded ' + result.Items.length + ' series');
+                    }).catch(function(error) {
+                        console.error('[TMDbEpisodeGroups] Error loading series:', error);
+                        Dashboard.alert('Failed to load TV series');
+                    });
+                },
+
+                loadEpisodeGroups: function(tmdbId, seriesId) {
+                    console.log('[TMDbEpisodeGroups] ===== START loadEpisodeGroups =====');
+                    console.log('[TMDbEpisodeGroups] Loading episode groups for TMDB ID:', tmdbId);
+                    console.log('[TMDbEpisodeGroups] Type of tmdbId:', typeof tmdbId);
+                    Dashboard.showLoadingMsg();
+                    
+                    var url = ApiClient.getUrl('TMDbEpisodeGroups/EpisodeGroups/' + tmdbId);
+                    console.log('[TMDbEpisodeGroups] API URL:', url);
+                    
+                    ApiClient.fetch({
+                        url: url,
+                        type: 'GET',
+                        dataType: 'json'
+                    }).then(function(groups) {
+                        console.log('[TMDbEpisodeGroups] RAW response type:', typeof groups);
+                        console.log('[TMDbEpisodeGroups] RAW response:', groups);
+                        console.log('[TMDbEpisodeGroups] Is Array?:', Array.isArray(groups));
+                        console.log('[TMDbEpisodeGroups] Number of groups:', groups ? groups.length : 0);
+                        
+                        // Debug: log first group's properties to see the casing
+                        if (groups && groups.length > 0) {
+                            console.log('[TMDbEpisodeGroups] First group object:', groups[0]);
+                            console.log('[TMDbEpisodeGroups] First group object keys:', Object.keys(groups[0]));
+                            console.log('[TMDbEpisodeGroups] First group data (stringified):', JSON.stringify(groups[0], null, 2));
+                            console.log('[TMDbEpisodeGroups] First group.id:', groups[0].id);
+                            console.log('[TMDbEpisodeGroups] First group.name:', groups[0].name);
+                            console.log('[TMDbEpisodeGroups] First group.episodeCount:', groups[0].episodeCount);
+                        } else {
+                            console.warn('[TMDbEpisodeGroups] Groups is empty or null!');
+                        }
+                        
+                        var selector = document.getElementById('episode-group-selector');
+                        if (!selector) {
+                            console.error('[TMDbEpisodeGroups] Episode group selector element not found!');
+                            Dashboard.hideLoadingMsg();
+                            return;
+                        }
+                        
+                        console.log('[TMDbEpisodeGroups] Selector element found, clearing options');
+                        selector.innerHTML = '<option value="">-- Default (Air Date) --</option>';
+                        
+                        if (groups && groups.length > 0) {
+                            console.log('[TMDbEpisodeGroups] Starting to iterate through', groups.length, 'groups');
+                            var addedCount = 0;
+                            groups.forEach(function(group, index) {
+                                console.log('[TMDbEpisodeGroups] Processing group', index + 1, 'of', groups.length);
+                                
+                                // Support both PascalCase and camelCase property names
+                                var id = group.id || group.Id;
+                                var name = group.name || group.Name;
+                                var episodeCount = group.episodeCount || group.EpisodeCount || group.episode_count;
+                                
+                                console.log('[TMDbEpisodeGroups] Group', index, '- ID:', id, 'Name:', name, 'Episodes:', episodeCount);
+                                
+                                if (id && name) {
+                                    var option = document.createElement('option');
+                                    option.value = id;
+                                    option.textContent = name + ' (' + (episodeCount || 0) + ' episodes)';
+                                    selector.appendChild(option);
+                                    addedCount++;
+                                    console.log('[TMDbEpisodeGroups] Added option for group:', name);
+                                } else {
+                                    console.warn('[TMDbEpisodeGroups] Skipping group', index, 'with missing id or name. Group data:', group);
+                                }
+                            });
+                            console.log('[TMDbEpisodeGroups] Added', addedCount, 'options to selector');
+                        } else {
+                            console.warn('[TMDbEpisodeGroups] No episode groups found for this series');
+                        }
+                        
+                        // Load current configuration
+                        ApiClient.getPluginConfiguration(TMDbEpisodeGroupsConfig.pluginId).then(function(config) {
+                            console.log('[TMDbEpisodeGroups] Current config:', config);
+                            var existingConfig = config.EpisodeGroupConfigs.find(function(c) { return c.TmdbSeriesId === tmdbId; });
+                            if (existingConfig) {
+                                console.log('[TMDbEpisodeGroups] Found existing config for series, setting to:', existingConfig.EpisodeGroupId);
+                                selector.value = existingConfig.EpisodeGroupId;
+                            }
+                        });
+                        
+                        console.log('[TMDbEpisodeGroups] Showing episode group config section');
+                        document.getElementById('episode-group-config').style.display = 'block';
+                        Dashboard.hideLoadingMsg();
+                    }).catch(function(error) {
+                        console.error('[TMDbEpisodeGroups] Error loading episode groups:', error);
+                        console.error('[TMDbEpisodeGroups] Error details:', JSON.stringify(error));
+                        Dashboard.alert('Failed to load episode groups. Make sure your TMDB API key is configured. Check browser console for details.');
+                        Dashboard.hideLoadingMsg();
+                    });
+                },
+
+                onSeriesChange: function() {
+                    console.log('[TMDbEpisodeGroups] ===== onSeriesChange CALLED =====');
+                    var seriesSelector = document.getElementById('series-selector');
+                    console.log('[TMDbEpisodeGroups] Series selector element:', seriesSelector);
+                    
+                    var seriesId = seriesSelector.value;
+                    console.log('[TMDbEpisodeGroups] Selected series ID:', seriesId);
+                    
+                    if (!seriesId) {
+                        console.log('[TMDbEpisodeGroups] No series selected, hiding config');
+                        document.getElementById('episode-group-config').style.display = 'none';
+                        return;
+                    }
+                    
+                    console.log('[TMDbEpisodeGroups] allSeries array has', TMDbEpisodeGroupsConfig.allSeries.length, 'items');
+                    var selectedSeries = TMDbEpisodeGroupsConfig.allSeries.find(function(s) { return s.Id === seriesId; });
+                    console.log('[TMDbEpisodeGroups] Found selected series:', selectedSeries);
+                    
+                    var tmdbId = selectedSeries && selectedSeries.ProviderIds && selectedSeries.ProviderIds.Tmdb;
+                    
+                    console.log('[TMDbEpisodeGroups] Selected series name:', selectedSeries ? selectedSeries.Name : 'none');
+                    console.log('[TMDbEpisodeGroups] Selected series TMDB ID:', tmdbId);
+                    
+                    if (!tmdbId) {
+                        console.error('[TMDbEpisodeGroups] This series does not have a TMDB ID');
+                        Dashboard.alert('This series does not have a TMDB ID');
+                        return;
+                    }
+                    
+                    console.log('[TMDbEpisodeGroups] Calling loadEpisodeGroups with tmdbId:', tmdbId);
+                    TMDbEpisodeGroupsConfig.loadEpisodeGroups(tmdbId, seriesId);
+                },
+
+                saveEpisodeGroup: function() {
+                    console.log('[TMDbEpisodeGroups] Saving episode group configuration');
+                    var seriesSelector = document.getElementById('series-selector');
+                    var episodeGroupSelector = document.getElementById('episode-group-selector');
+
+                    var jellyfinSeriesId = seriesSelector.value;
+                    var selectedSeries = TMDbEpisodeGroupsConfig.allSeries.find(function(s) { return s.Id === jellyfinSeriesId; });
+                    var tmdbId = selectedSeries && selectedSeries.ProviderIds && selectedSeries.ProviderIds.Tmdb;
+                    var episodeGroupId = episodeGroupSelector.value;
+                    var episodeGroupName = episodeGroupSelector.options[episodeGroupSelector.selectedIndex].text;
+
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(TMDbEpisodeGroupsConfig.pluginId).then(function(config) {
+                        // Remove existing config for this series
+                        config.EpisodeGroupConfigs = config.EpisodeGroupConfigs.filter(function(c) { return c.TmdbSeriesId !== tmdbId; });
+
+                        // Add new config if episode group selected
+                        if (episodeGroupId) {
+                            config.EpisodeGroupConfigs.push({
+                                TmdbSeriesId: tmdbId,
+                                EpisodeGroupId: episodeGroupId,
+                                EpisodeGroupName: episodeGroupName
+                            });
+                            console.log('[TMDbEpisodeGroups] Added config for series', tmdbId, 'with group', episodeGroupId);
+                        }
+
+                        ApiClient.updatePluginConfiguration(TMDbEpisodeGroupsConfig.pluginId, config).then(function() {
+                            // Also write the episode group ID to the series item's metadata
+                            var url = ApiClient.getUrl('TMDbEpisodeGroups/SetSeriesEpisodeGroup/' + jellyfinSeriesId + '?episodeGroupId=' + encodeURIComponent(episodeGroupId || ''));
+                            ApiClient.fetch({ url: url, type: 'POST' }).then(function() {
+                                Dashboard.hideLoadingMsg();
+                                Dashboard.alert('Episode group configuration saved');
+                            }).catch(function(error) {
+                                console.error('[TMDbEpisodeGroups] Error writing episode group to series metadata:', error);
+                                Dashboard.hideLoadingMsg();
+                                Dashboard.alert('Episode group saved to plugin config, but failed to update series metadata');
+                            });
+                        }).catch(function(error) {
+                            console.error('[TMDbEpisodeGroups] Error saving config:', error);
+                            Dashboard.hideLoadingMsg();
+                            Dashboard.alert('Failed to save configuration');
+                        });
+                    });
+                },
+
+                refreshEpisodeMetadata: function() {
+                    console.log('[TMDbEpisodeGroups] Refreshing episode metadata');
+                    var seriesSelector = document.getElementById('series-selector');
+                    var selectedSeries = TMDbEpisodeGroupsConfig.allSeries.find(function(s) { return s.Id === seriesSelector.value; });
+                    var tmdbId = selectedSeries && selectedSeries.ProviderIds && selectedSeries.ProviderIds.Tmdb;
+                    
+                    Dashboard.showLoadingMsg();
+                    ApiClient.fetch({
+                        url: ApiClient.getUrl('TMDbEpisodeGroups/RefreshEpisodeMetadata/' + tmdbId),
+                        type: 'POST'
+                    }).then(function() {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Episode metadata refresh started');
+                    }).catch(function(error) {
+                        console.error('[TMDbEpisodeGroups] Error refreshing metadata:', error);
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Failed to refresh episode metadata');
+                    });
+                },
+
+                saveConfiguration: function() {
+                    console.log('[TMDbEpisodeGroups] Saving main configuration');
+                    Dashboard.showLoadingMsg();
+
+                    var tmdbApiKey = document.getElementById('tmdb-api-key').value;
+                    var cacheExpirationHours = parseInt(document.getElementById('cache-expiration-hours').value, 10) || 24;
+
+                    ApiClient.getPluginConfiguration(TMDbEpisodeGroupsConfig.pluginId).then(function (config) {
+                        config.TmdbApiKey = tmdbApiKey;
+                        config.CacheExpirationHours = cacheExpirationHours;
+
+                        ApiClient.updatePluginConfiguration(TMDbEpisodeGroupsConfig.pluginId, config).then(function(result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+                },
+
+                warmCache: function() {
+                    console.log('[TMDbEpisodeGroups] Refreshing TMDB data for selected episode group');
+                    var seriesSelector = document.getElementById('series-selector');
+                    var episodeGroupSelector = document.getElementById('episode-group-selector');
+                    var episodeGroupId = episodeGroupSelector.value;
+
+                    if (!episodeGroupId) {
+                        Dashboard.alert('No episode group selected');
+                        return;
+                    }
+
+                    Dashboard.showLoadingMsg();
+                    ApiClient.fetch({
+                        url: ApiClient.getUrl('TMDbEpisodeGroups/WarmCache/' + episodeGroupId),
+                        type: 'POST'
+                    }).then(function() {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('TMDB data refreshed — cached data has been updated');
+                    }).catch(function(error) {
+                        console.error('[TMDbEpisodeGroups] Error refreshing TMDB data:', error);
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Failed to refresh TMDB data');
+                    });
+                }
+            };
+
+            console.log('[TMDbEpisodeGroups] Setting up page show event listener');
+            
+            // Page show event - load configuration
+            document.querySelector('.tbsConfigurationPage').addEventListener('pageshow', function () {
+                console.log('[TMDbEpisodeGroups] ===== PAGE SHOW EVENT FIRED =====');
+                TMDbEpisodeGroupsConfig.loadConfiguration();
+                
+                // Attach event handlers
+                var seriesSelector = document.getElementById('series-selector');
+                if (seriesSelector) {
+                    seriesSelector.removeEventListener('change', TMDbEpisodeGroupsConfig.onSeriesChange);
+                    seriesSelector.addEventListener('change', TMDbEpisodeGroupsConfig.onSeriesChange);
+                    console.log('[TMDbEpisodeGroups] Series selector change handler attached');
+                }
+                
+                var saveEpisodeGroupBtn = document.getElementById('save-episode-group');
+                if (saveEpisodeGroupBtn) {
+                    saveEpisodeGroupBtn.removeEventListener('click', TMDbEpisodeGroupsConfig.saveEpisodeGroup);
+                    saveEpisodeGroupBtn.addEventListener('click', TMDbEpisodeGroupsConfig.saveEpisodeGroup);
+                    console.log('[TMDbEpisodeGroups] Save episode group button handler attached');
+                }
+                
+                var refreshBtn = document.getElementById('refresh-episode-metadata');
+                if (refreshBtn) {
+                    refreshBtn.removeEventListener('click', TMDbEpisodeGroupsConfig.refreshEpisodeMetadata);
+                    refreshBtn.addEventListener('click', TMDbEpisodeGroupsConfig.refreshEpisodeMetadata);
+                    console.log('[TMDbEpisodeGroups] Refresh metadata button handler attached');
+                }
+
+                var warmCacheBtn = document.getElementById('warm-cache');
+                if (warmCacheBtn) {
+                    warmCacheBtn.removeEventListener('click', TMDbEpisodeGroupsConfig.warmCache);
+                    warmCacheBtn.addEventListener('click', TMDbEpisodeGroupsConfig.warmCache);
+                    console.log('[TMDbEpisodeGroups] Warm cache button handler attached');
+                }
+            });
+
+            // Form submit event - save configuration
+            document.querySelector('.tbsConfigurationPage').addEventListener('submit', function (e) {
+                e.preventDefault();
+                TMDbEpisodeGroupsConfig.saveConfiguration();
+                return false;
+            });
+        </script>
+    </div>
+</body>
+</html>

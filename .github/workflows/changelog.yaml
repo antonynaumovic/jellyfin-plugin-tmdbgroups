@@ -15,6 +15,6 @@ jobs:
   call:
     uses: jellyfin/jellyfin-meta-plugins/.github/workflows/changelog.yaml@master
     with:
-      repository-name: jellyfin/jellyfin-plugin-tmdbboxsets
+      repository-name: jellyfin/jellyfin-plugin-tmdb-episode-groups
     secrets:
       token: ${{ secrets.JF_BOT_TOKEN }}

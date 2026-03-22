@@ -1,0 +1,51 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.136
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jellyfin.Plugin.TMDbEpisodeGroups", "Jellyfin.Plugin.TMDbEpisodeGroups\Jellyfin.Plugin.TMDbEpisodeGroups.csproj", "{A6C0029B-F304-4577-92D3-32153DCE1FDC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.TMDbEpisodeGroups.Tests", "Jellyfin.Plugin.TMDbEpisodeGroups.Tests\Jellyfin.Plugin.TMDbEpisodeGroups.Tests.csproj", "{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Debug|x64.Build.0 = Debug|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Debug|x86.Build.0 = Debug|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Release|x64.ActiveCfg = Release|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Release|x64.Build.0 = Release|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Release|x86.ActiveCfg = Release|Any CPU
+		{A6C0029B-F304-4577-92D3-32153DCE1FDC}.Release|x86.Build.0 = Release|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Debug|x64.Build.0 = Debug|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Debug|x86.Build.0 = Debug|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Release|x64.ActiveCfg = Release|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Release|x64.Build.0 = Release|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Release|x86.ActiveCfg = Release|Any CPU
+		{9CC7CF34-CB9A-485D-89A9-C49C9A07E1E0}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2CA974E4-4306-49EA-A84B-2EA99B35E80D}
+	EndGlobalSection
+EndGlobal
