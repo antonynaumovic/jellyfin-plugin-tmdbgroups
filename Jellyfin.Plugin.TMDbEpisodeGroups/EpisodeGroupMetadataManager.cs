@@ -117,7 +117,7 @@ public class EpisodeGroupMetadataManager
 
             // Pre-build a lookup by (season, episode) position for O(1) matching
             var episodeByPosition = episodes
-                .Where(e => e.ParentIndexNumber.HasValue && e.IndexNumber.HasValue)
+                .Where(e => e.ParentIndexNumber.HasValue && e.ParentIndexNumber.Value > 0 && e.IndexNumber.HasValue)
                 .ToDictionary(e => (e.ParentIndexNumber!.Value, e.IndexNumber!.Value));
 
             int updatedCount = 0;

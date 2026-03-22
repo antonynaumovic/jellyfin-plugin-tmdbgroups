@@ -63,6 +63,12 @@ public class TMDbEpisodeGroupProvider : IRemoteMetadataProvider<Episode, Episode
             info.ParentIndexNumber,
             info.IndexNumber);
 
+        if (info.ParentIndexNumber is null or 0)
+        {
+            _logger.LogDebug("[TMDbEpisodeGroups] Skipping specials (season 0)");
+            return result;
+        }
+
         try
         {
             // Get the series TMDB ID
