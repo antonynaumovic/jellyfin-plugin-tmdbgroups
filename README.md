@@ -4,12 +4,12 @@ A Jellyfin plugin that allows you to use TMDB episode groups to provide alternat
 
 ## Features
 
-- ?? **Episode Group Support**: Use any TMDB episode group for your TV series
-- ?? **Metadata Updates**: Automatically update episode titles and descriptions from episode groups
-- ?? **Metadata Provider Integration**: Shows as a metadata downloader in Jellyfin's library settings
-- ?? **Web Configuration**: Easy-to-use configuration page in Jellyfin dashboard
-- ?? **Manual & Automatic Refresh**: Refresh metadata manually or automatically during library scans
-- ?? **Series-Specific**: Configure different episode groups for each series
+- 🎬 **Episode Group Support**: Use any TMDB episode group for your TV series
+- ✏️ **Metadata Updates**: Automatically update episode titles and descriptions from episode groups
+- 🔌 **Metadata Provider Integration**: Shows as a metadata downloader in Jellyfin's library settings
+- ⚙️ **Web Configuration**: Easy-to-use configuration page in Jellyfin dashboard
+- 🔄 **Manual & Automatic Refresh**: Refresh metadata manually or automatically during library scans
+- 📺 **Series-Specific**: Configure different episode groups for each series
 
 ## Use Case Example
 
@@ -46,13 +46,13 @@ The plugin will update all episode titles and descriptions to match the DVD orde
 
 ### Method 2: Plugin Repository (Future)
 Once published to the Jellyfin plugin repository, you can install directly from:
-- Dashboard ? Plugins ? Catalog ? TMDb Episode Groups
+- Dashboard > Plugins > Catalog > TMDb Episode Groups
 
 ## Configuration
 
 ### 1. Add TMDB API Key
 
-1. Navigate to **Dashboard ? Plugins ? TMDb Episode Groups**
+1. Navigate to **Dashboard > Plugins > TMDb Episode Groups**
 2. Enter your **TMDB API Key**
    - Get your API key from [TMDB Settings](https://www.themoviedb.org/settings/api)
    - You need a TMDB account to generate an API key
@@ -70,9 +70,9 @@ Once published to the Jellyfin plugin repository, you can install directly from:
 
 To have the plugin automatically update episodes during library scans:
 
-1. Go to **Dashboard ? Libraries**
+1. Go to **Dashboard > Libraries**
 2. Select your **TV Shows library**
-3. Click **Manage library** ? **Metadata providers**
+3. Click **Manage library** > **Metadata providers**
 4. Scroll to **Episodes** section
 5. Enable **"TMDb Episode Groups"**
 6. Move it to your preferred priority order
@@ -101,8 +101,8 @@ Now when you refresh metadata for a series, the plugin will automatically provid
 
 #### Via Jellyfin Library
 1. Go to your TV series library
-2. Right-click on the series ? **Identify** ? **Search**
-3. After identification, right-click again ? **Refresh Metadata**
+2. Right-click on the series > **Identify** > **Search**
+3. After identification, right-click again > **Refresh Metadata**
 4. The plugin will automatically update episodes if configured
 
 #### Via API
