@@ -19,12 +19,6 @@ $checksum = & ./make-artifact.ps1
 $manifestPath = 'manifest.json'
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 
-$existing = $manifest[0].versions | Where-Object { $_.version -eq $version }
-if ($existing) {
-    Write-Warning "Version $version already exists in manifest. Skipping manifest update."
-    exit 0
-}
-
 $entry = [ordered]@{
     changelog = $Changelog
     checksum  = $checksum
@@ -32,6 +26,16 @@ $entry = [ordered]@{
     targetAbi = $TargetAbi
     timestamp = (Get-Date -Format 'yyyy-MM-ddT00:00:00Z')
     version   = $version
+}
+
+$existing = $manifest[0].versions | Where-Object { $_.version -eq $version }
+if ($existing) {
+    if ($existing.checksum -eq $entry.checksum -and $existing.timestamp -eq $entry.timestamp) {
+        Write-Host "Version $version already up to date. Skipping manifest update."
+        exit 0
+    }
+    Write-Host "Recreating manifest entry for v$version (checksum or timestamp changed)."
+    $manifest[0].versions = @($manifest[0].versions | Where-Object { $_.version -ne $version })
 }
 
 $manifest[0].versions = @([PSCustomObject]$entry) + $manifest[0].versions
