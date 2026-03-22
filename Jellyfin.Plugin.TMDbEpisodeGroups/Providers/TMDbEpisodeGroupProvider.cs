@@ -75,10 +75,8 @@ public class TMDbEpisodeGroupProvider : IRemoteMetadataProvider<Episode, Episode
 
             _logger.LogDebug("[TMDbEpisodeGroups] Series TMDB ID: {TmdbId}", seriesTmdbId);
 
-            // Check for episode group ID in series external IDs first
-            var episodeGroupId = info.SeriesProviderIds?.GetValueOrDefault("TmdbEpisodeGroup");
-
-            // Fall back to plugin configuration if not set on series
+            // Check for episode group ID in series external IDs first, fall back to plugin config
+            var episodeGroupId = info.SeriesProviderIds?.GetValueOrDefault(TmdbEpisodeGroupExternalId.EpisodeGroupProviderId);
             if (string.IsNullOrEmpty(episodeGroupId))
             {
                 var config = Plugin.Instance?.PluginConfiguration?.EpisodeGroupConfigs
@@ -93,14 +91,6 @@ public class TMDbEpisodeGroupProvider : IRemoteMetadataProvider<Episode, Episode
             }
 
             _logger.LogInformation("[TMDbEpisodeGroups] Using episode group: {GroupId}", episodeGroupId);
-
-            // Get TMDB API key
-            var apiKey = Plugin.Instance?.PluginConfiguration?.TmdbApiKey;
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                _logger.LogWarning("[TMDbEpisodeGroups] TMDB API key not configured");
-                return result;
-            }
 
             // Fetch episode group details (from cache or TMDB)
             var episodeGroupDetails = await _episodeGroupCache.GetOrFetchAsync(

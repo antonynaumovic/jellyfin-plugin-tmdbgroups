@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.TMDbEpisodeGroups.Configuration;
+using Jellyfin.Plugin.TMDbEpisodeGroups.Providers;
 using Jellyfin.Plugin.TMDbEpisodeGroups.Services;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
@@ -65,10 +67,8 @@ public class EpisodeGroupMetadataManager
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task RefreshSeriesEpisodeMetadata(string tmdbSeriesId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[TMDbEpisodeGroups] RefreshSeriesEpisodeMetadata called for series TMDB ID: {TmdbSeriesId}", tmdbSeriesId);
+        _logger.LogInformation("[TMDbEpisodeGroups] Refreshing metadata for series {TmdbSeriesId}", tmdbSeriesId);
 
-        // Get the series from Jellyfin library first to check for external ID
-        _logger.LogDebug("[TMDbEpisodeGroups] Searching for series in Jellyfin library");
         var seriesList = _libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = [BaseItemKind.Series],
@@ -77,33 +77,18 @@ public class EpisodeGroupMetadataManager
         });
 
         var series = seriesList?.FirstOrDefault(s => s.GetProviderId(MetadataProvider.Tmdb) == tmdbSeriesId);
-
         if (series == null)
         {
             _logger.LogWarning("[TMDbEpisodeGroups] Series with TMDB ID {TmdbSeriesId} not found in library", tmdbSeriesId);
             return;
         }
 
-        _logger.LogInformation("[TMDbEpisodeGroups] Found series: {SeriesName}", series.Name);
-
-        // Log all provider IDs for debugging
-        _logger.LogDebug("[TMDbEpisodeGroups] Series has {Count} provider IDs", series.ProviderIds.Count);
-        foreach (var providerId in series.ProviderIds)
-        {
-            _logger.LogDebug("[TMDbEpisodeGroups] Provider ID: {Key} = {Value}", providerId.Key, providerId.Value);
-        }
-
-        // Check for episode group ID in series external IDs first
-        var episodeGroupId = series.GetProviderId("TmdbEpisodeGroup");
-        _logger.LogDebug("[TMDbEpisodeGroups] Episode group ID from external ID: {EpisodeGroupId}", episodeGroupId ?? "(null)");
-
-        // Fall back to plugin configuration if not set on series
+        // Check for episode group ID in series external IDs first, fall back to plugin config
+        var episodeGroupId = series.GetProviderId(TmdbEpisodeGroupExternalId.EpisodeGroupProviderId);
         if (string.IsNullOrEmpty(episodeGroupId))
         {
-            var config = _configProvider()
-                .FirstOrDefault(c => c.TmdbSeriesId == tmdbSeriesId);
-            episodeGroupId = config?.EpisodeGroupId;
-            _logger.LogDebug("[TMDbEpisodeGroups] Episode group ID from plugin config: {EpisodeGroupId}", episodeGroupId ?? "(null)");
+            episodeGroupId = _configProvider()
+                .FirstOrDefault(c => c.TmdbSeriesId == tmdbSeriesId)?.EpisodeGroupId;
         }
 
         if (string.IsNullOrEmpty(episodeGroupId))
@@ -113,206 +98,103 @@ public class EpisodeGroupMetadataManager
         }
 
         _logger.LogInformation(
-            "[TMDbEpisodeGroups] Refreshing episode metadata for series {TmdbSeriesId} using episode group {EpisodeGroupId}",
-            tmdbSeriesId,
-            episodeGroupId);
+            "[TMDbEpisodeGroups] Using episode group {EpisodeGroupId} for {SeriesName}",
+            episodeGroupId,
+            series.Name);
 
         try
         {
-            // Fetch episode group details (from cache or TMDB)
-            _logger.LogDebug("[TMDbEpisodeGroups] Fetching episode group details (from cache or TMDB)");
-            var episodeGroupDetails = await _episodeGroupCache.GetOrFetchAsync(
-                episodeGroupId,
-                cancellationToken).ConfigureAwait(false);
+            var episodeGroupDetails = await _episodeGroupCache.GetOrFetchAsync(episodeGroupId, cancellationToken).ConfigureAwait(false);
 
-            _logger.LogDebug("[TMDbEpisodeGroups] Found {GroupCount} groups in episode group", episodeGroupDetails.Groups?.Count ?? 0);
-
-            // Get all episodes for this series
             var episodes = _libraryManager.GetItemList(new InternalItemsQuery
             {
                 IncludeItemTypes = [BaseItemKind.Episode],
                 AncestorIds = [series.Id],
                 Recursive = true
-            }).Select(e => e as Episode).Where(e => e != null).ToList();
+            }).Cast<Episode>().ToList();
 
-            _logger.LogInformation("[TMDbEpisodeGroups] Found {Count} episodes for series", episodes.Count);
+            _logger.LogInformation("[TMDbEpisodeGroups] Matching {EpisodeCount} episodes against episode group", episodes.Count);
 
-            // Log sample of Jellyfin episodes for debugging
-            if (episodes.Count > 0)
-            {
-                var sampleCount = Math.Min(5, episodes.Count);
-                _logger.LogDebug("[TMDbEpisodeGroups] Sample of Jellyfin episodes (showing first {Count}):", sampleCount);
-                for (int i = 0; i < sampleCount; i++)
-                {
-                    var episode = episodes[i];
-                    var tmdbId = episode.GetProviderId(MetadataProvider.Tmdb);
-                    _logger.LogInformation(
-                        "[TMDbEpisodeGroups]   Episode: S{SeasonNumber}E{EpisodeNumber} - {EpisodeName}, TMDB ID: {TmdbId}",
-                        episode.ParentIndexNumber,
-                        episode.IndexNumber,
-                        episode.Name,
-                        tmdbId ?? "(none)");
-                }
-            }
+            // Pre-build a lookup by (season, episode) position for O(1) matching
+            var episodeByPosition = episodes
+                .Where(e => e.ParentIndexNumber.HasValue && e.IndexNumber.HasValue)
+                .ToDictionary(e => (e.ParentIndexNumber!.Value, e.IndexNumber!.Value));
 
-            // Map episode group data to Jellyfin episodes
             int updatedCount = 0;
             int groupIndex = 0;
             foreach (var group in episodeGroupDetails.Groups)
             {
                 groupIndex++;
-                _logger.LogInformation(
-                    "[TMDbEpisodeGroups] Processing group {GroupIndex}/{TotalGroups}: {GroupName} with {EpisodeCount} episodes",
-                    groupIndex,
-                    episodeGroupDetails.Groups.Count,
-                    group.Name,
-                    group.Episodes.Count);
-
                 int episodeIndex = 0;
                 foreach (var tmdbEpisode in group.Episodes)
                 {
                     episodeIndex++;
-                    _logger.LogInformation(
-                        "[TMDbEpisodeGroups] Looking for S{SeasonNumber}E{EpisodeNumber} - {EpisodeName} (original: S{OriginalSeason}E{OriginalEpisode})",
-                        groupIndex,
-                        episodeIndex,
-                        tmdbEpisode.Name,
-                        tmdbEpisode.SeasonNumber,
-                        tmdbEpisode.EpisodeNumber);
-
-                    // Find matching episode by season/episode number using group index and position
-                    var matchingEpisode = episodes.FirstOrDefault(e =>
-                        e.ParentIndexNumber == groupIndex &&
-                        e.IndexNumber == episodeIndex);
-
-                    if (matchingEpisode != null)
+                    if (!episodeByPosition.TryGetValue((groupIndex, episodeIndex), out var matchingEpisode))
                     {
-                        _logger.LogInformation(
-                            "[TMDbEpisodeGroups] Found match: S{SeasonNumber}E{EpisodeNumber} - {EpisodeName}",
-                            groupIndex,
-                            episodeIndex,
-                            matchingEpisode.Name);
-
-                        // Update episode metadata
-                        bool updated = false;
-
-                        // Update name
-                        if (matchingEpisode.Name != tmdbEpisode.Name && !string.IsNullOrEmpty(tmdbEpisode.Name))
-                        {
-                            _logger.LogInformation(
-                                "[TMDbEpisodeGroups] Updating name: '{OldName}' -> '{NewName}'",
-                                matchingEpisode.Name,
-                                tmdbEpisode.Name);
-                            matchingEpisode.Name = tmdbEpisode.Name;
-                            updated = true;
-                        }
-
-                        // Update overview
-                        if (matchingEpisode.Overview != tmdbEpisode.Overview && !string.IsNullOrEmpty(tmdbEpisode.Overview))
-                        {
-                            _logger.LogInformation("[TMDbEpisodeGroups] Updating overview");
-                            matchingEpisode.Overview = tmdbEpisode.Overview;
-                            updated = true;
-                        }
-
-                        // Update TMDB episode ID
-                        var currentTmdbId = matchingEpisode.GetProviderId(MetadataProvider.Tmdb);
-                        var newTmdbId = tmdbEpisode.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                        if (currentTmdbId != newTmdbId)
-                        {
-                            _logger.LogInformation(
-                                "[TMDbEpisodeGroups] Updating TMDB ID: '{OldId}' -> '{NewId}'",
-                                currentTmdbId ?? "(none)",
-                                newTmdbId);
-                            matchingEpisode.SetProviderId(MetadataProvider.Tmdb, newTmdbId);
-                            updated = true;
-                        }
-
-                        // Update air date
-                        if (!string.IsNullOrEmpty(tmdbEpisode.AirDate) && DateTime.TryParse(tmdbEpisode.AirDate, out var airDate))
-                        {
-                            if (matchingEpisode.PremiereDate != airDate)
-                            {
-                                _logger.LogInformation(
-                                    "[TMDbEpisodeGroups] Updating air date: '{OldDate}' -> '{NewDate}'",
-                                    matchingEpisode.PremiereDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "(none)",
-                                    airDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
-                                matchingEpisode.PremiereDate = airDate;
-                                updated = true;
-                            }
-                        }
-
-                        // Update runtime
-                        if (tmdbEpisode.Runtime.HasValue && tmdbEpisode.Runtime.Value > 0)
-                        {
-                            var runtimeTicks = TimeSpan.FromMinutes(tmdbEpisode.Runtime.Value).Ticks;
-                            if (matchingEpisode.RunTimeTicks != runtimeTicks)
-                            {
-                                _logger.LogInformation(
-                                    "[TMDbEpisodeGroups] Updating runtime: {OldRuntime} -> {NewRuntime} minutes",
-                                    matchingEpisode.RunTimeTicks.HasValue ? TimeSpan.FromTicks(matchingEpisode.RunTimeTicks.Value).TotalMinutes : 0,
-                                    tmdbEpisode.Runtime.Value);
-                                matchingEpisode.RunTimeTicks = runtimeTicks;
-                                updated = true;
-                            }
-                        }
-
-                        // Update still path (primary image)
-                        if (!string.IsNullOrEmpty(tmdbEpisode.StillPath))
-                        {
-                            var imageUrl = $"https://image.tmdb.org/t/p/original{tmdbEpisode.StillPath}";
-                            _logger.LogInformation(
-                                "[TMDbEpisodeGroups] Episode has still path, will be fetched by image provider: {StillPath}",
-                                tmdbEpisode.StillPath);
-                            // Note: Image downloading is handled by Jellyfin's image providers
-                            // We just ensure the TMDB ID is set so the image provider can fetch it
-                        }
-
-                        if (updated)
-                        {
-                            await _libraryManager.UpdateItemAsync(
-                                matchingEpisode,
-                                matchingEpisode.GetParent(),
-                                ItemUpdateType.MetadataEdit,
-                                cancellationToken).ConfigureAwait(false);
-
-                            updatedCount++;
-                            _logger.LogInformation(
-                                "[TMDbEpisodeGroups] Updated episode S{SeasonNumber}E{EpisodeNumber}: {EpisodeName}",
-                                groupIndex,
-                                episodeIndex,
-                                tmdbEpisode.Name);
-                        }
-                        else
-                        {
-                            _logger.LogInformation(
-                                "[TMDbEpisodeGroups] No update needed for S{Season}E{Episode} - metadata already matches",
-                                groupIndex,
-                                episodeIndex);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogInformation(
-                            "[TMDbEpisodeGroups] No matching episode found for S{SeasonNumber}E{EpisodeNumber} - {EpisodeName}",
+                        _logger.LogDebug(
+                            "[TMDbEpisodeGroups] No match for S{Season}E{Episode} ({Name})",
                             groupIndex,
                             episodeIndex,
                             tmdbEpisode.Name);
+                        continue;
+                    }
+
+                    bool updated = false;
+
+                    if (!string.IsNullOrEmpty(tmdbEpisode.Name) && matchingEpisode.Name != tmdbEpisode.Name)
+                    {
+                        _logger.LogDebug(
+                            "[TMDbEpisodeGroups] S{Season}E{Episode}: name '{Old}' -> '{New}'",
+                            groupIndex,
+                            episodeIndex,
+                            matchingEpisode.Name,
+                            tmdbEpisode.Name);
+                        matchingEpisode.Name = tmdbEpisode.Name;
+                        updated = true;
+                    }
+
+                    if (!string.IsNullOrEmpty(tmdbEpisode.Overview) && matchingEpisode.Overview != tmdbEpisode.Overview)
+                    {
+                        _logger.LogDebug("[TMDbEpisodeGroups] S{Season}E{Episode}: updating overview", groupIndex, episodeIndex);
+                        matchingEpisode.Overview = tmdbEpisode.Overview;
+                        updated = true;
+                    }
+
+                    var newTmdbId = tmdbEpisode.Id.ToString(CultureInfo.InvariantCulture);
+                    if (matchingEpisode.GetProviderId(MetadataProvider.Tmdb) != newTmdbId)
+                    {
+                        matchingEpisode.SetProviderId(MetadataProvider.Tmdb, newTmdbId);
+                        updated = true;
+                    }
+
+                    if (!string.IsNullOrEmpty(tmdbEpisode.AirDate) &&
+                        DateTime.TryParse(tmdbEpisode.AirDate, out var airDate) &&
+                        matchingEpisode.PremiereDate != airDate)
+                    {
+                        matchingEpisode.PremiereDate = airDate;
+                        updated = true;
+                    }
+
+                    if (updated)
+                    {
+                        await _libraryManager.UpdateItemAsync(
+                            matchingEpisode,
+                            matchingEpisode.GetParent(),
+                            ItemUpdateType.MetadataEdit,
+                            cancellationToken).ConfigureAwait(false);
+                        updatedCount++;
                     }
                 }
             }
 
             _logger.LogInformation(
-                "[TMDbEpisodeGroups] Updated metadata for {UpdatedCount} episodes in series {TmdbSeriesId}",
+                "[TMDbEpisodeGroups] Updated {UpdatedCount} episodes for series {TmdbSeriesId}",
                 updatedCount,
                 tmdbSeriesId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "[TMDbEpisodeGroups] Error refreshing episode metadata for series {TmdbSeriesId}",
-                tmdbSeriesId);
+            _logger.LogError(ex, "[TMDbEpisodeGroups] Error refreshing metadata for series {TmdbSeriesId}", tmdbSeriesId);
             throw;
         }
     }
@@ -373,21 +255,14 @@ public class EpisodeGroupMetadataManager
             return;
         }
 
-        if (string.IsNullOrEmpty(episodeGroupId))
-        {
-            series.ProviderIds.Remove("TmdbEpisodeGroup");
-            _logger.LogInformation(
-                "[TMDbEpisodeGroups] Cleared TmdbEpisodeGroup provider ID from series {SeriesName}",
-                series.Name);
-        }
-        else
-        {
-            series.SetProviderId("TmdbEpisodeGroup", episodeGroupId);
-            _logger.LogInformation(
-                "[TMDbEpisodeGroups] Set TmdbEpisodeGroup provider ID on series {SeriesName} to {EpisodeGroupId}",
-                series.Name,
-                episodeGroupId);
-        }
+        // SetProviderId with an empty string removes the key; with a value it sets it
+        series.SetProviderId(TmdbEpisodeGroupExternalId.EpisodeGroupProviderId, episodeGroupId ?? string.Empty);
+
+        _logger.LogInformation(
+            "[TMDbEpisodeGroups] {Action} TmdbEpisodeGroup on {SeriesName}: {Value}",
+            string.IsNullOrEmpty(episodeGroupId) ? "Cleared" : "Set",
+            series.Name,
+            episodeGroupId ?? "(cleared)");
 
         await _libraryManager.UpdateItemAsync(
             series,

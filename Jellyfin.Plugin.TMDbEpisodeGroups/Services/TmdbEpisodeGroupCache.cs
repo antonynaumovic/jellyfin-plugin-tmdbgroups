@@ -89,10 +89,9 @@ public class TmdbEpisodeGroupCache : ITmdbEpisodeGroupCache
             try
             {
                 _logger.LogInformation("[TMDbEpisodeGroups] Warming cache for episode group {EpisodeGroupId}", episodeGroupId);
-                _cache.TryRemove(episodeGroupId, out _);
                 await FetchAndStoreAsync(episodeGroupId, cancellationToken).ConfigureAwait(false);
 
-                // Small delay between requests to avoid overwhelming the TMDB API
+                // Fixed 500ms delay to stay within TMDB's rate limit (~40 req/10s)
                 await Task.Delay(500, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
