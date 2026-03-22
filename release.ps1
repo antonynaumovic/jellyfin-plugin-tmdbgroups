@@ -36,6 +36,6 @@ $entry = [ordered]@{
 
 $manifest[0].versions = @([PSCustomObject]$entry) + $manifest[0].versions
 
-@($manifest) | ConvertTo-Json -Depth 10 | Set-Content $manifestPath -Encoding UTF8
+ConvertTo-Json -InputObject @($manifest) -Depth 10 | Set-Content $manifestPath -Encoding UTF8
 
 Write-Host "Released v$version (checksum: $checksum)"

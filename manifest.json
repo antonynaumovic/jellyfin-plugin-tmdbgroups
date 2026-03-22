@@ -1,27 +1,29 @@
-﻿{
-    "category":  "Metadata",
-    "description":  "Fetch episode metadata (titles, descriptions) from TMDb episode groups for better organization of multi-season series with alternate episode orders such as DVD order or production order.",
-    "guid":  "7e0a7d42-3f8c-4b9e-a1f2-5d8c9e6f4a3b",
-    "imageUrl":  "",
-    "name":  "TMDb Episode Groups",
-    "overview":  "Use TMDb episode groups to organize and fetch episode metadata",
-    "owner":  "antonynaumovic",
-    "versions":  [
-                     {
-                         "changelog":  "- Bug fixes and improvements",
-                         "checksum":  "bb0c7dbc2bee4cae044c5e166369aa5f",
-                         "sourceUrl":  "https://github.com/antonynaumovic/jellyfin-plugin-tmdbgroups/releases/download/v0.0.0.3/tmdb-episode-groups_0.0.0.3.zip",
-                         "targetAbi":  "10.11.0.0",
-                         "timestamp":  "2026-03-22T00:00:00Z",
-                         "version":  "0.0.0.3"
-                     },
-                     {
-                         "changelog":  "- Initial release of TMDb Episode Groups plugin\n- Configure episode groups per series via the dashboard\n- Episode group ID is written directly to series metadata\n- In-memory cache with configurable TTL to reduce TMDB API calls\n- Manual cache refresh via dashboard or API endpoints",
-                         "checksum":  "20a7b00ec2a4c89d72edcf9552d94110",
-                         "sourceUrl":  "https://github.com/antonynaumovic/jellyfin-plugin-tmdbgroups/releases/download/v0.0.0.2/tmdb-episode-groups_0.0.0.2.zip",
-                         "targetAbi":  "10.11.0.0",
-                         "timestamp":  "2026-03-22T00:00:00Z",
-                         "version":  "0.0.0.2"
-                     }
-                 ]
-}
+﻿[
+    {
+        "category": "Metadata",
+        "description": "Fetch episode metadata (titles, descriptions) from TMDb episode groups for better organization of multi-season series with alternate episode orders such as DVD order or production order.",
+        "guid": "7e0a7d42-3f8c-4b9e-a1f2-5d8c9e6f4a3b",
+        "imageUrl": "",
+        "name": "TMDb Episode Groups",
+        "overview": "Use TMDb episode groups to organize and fetch episode metadata",
+        "owner": "antonynaumovic",
+        "versions": [
+            {
+                "changelog": "- Bug fixes and improvements",
+                "checksum": "4039a31747bb2e4fc8a9a4448cec7947",
+                "sourceUrl": "https://github.com/antonynaumovic/jellyfin-plugin-tmdbgroups/releases/download/v0.0.0.3/tmdb-episode-groups_0.0.0.3.zip",
+                "targetAbi": "10.11.0.0",
+                "timestamp": "2026-03-22T00:00:00Z",
+                "version": "0.0.0.3"
+            },
+            {
+                "changelog": "- Initial release of TMDb Episode Groups plugin\n- Configure episode groups per series via the dashboard\n- Episode group ID is written directly to series metadata\n- In-memory cache with configurable TTL to reduce TMDB API calls\n- Manual cache refresh via dashboard or API endpoints",
+                "checksum": "20a7b00ec2a4c89d72edcf9552d94110",
+                "sourceUrl": "https://github.com/antonynaumovic/jellyfin-plugin-tmdbgroups/releases/download/v0.0.0.2/tmdb-episode-groups_0.0.0.2.zip",
+                "targetAbi": "10.11.0.0",
+                "timestamp": "2026-03-22T00:00:00Z",
+                "version": "0.0.0.2"
+            }
+        ]
+    }
+]
