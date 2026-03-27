@@ -13,6 +13,7 @@ namespace Jellyfin.Plugin.TMDbEpisodeGroups.Services;
 public class TmdbEpisodeGroupCache : ITmdbEpisodeGroupCache
 {
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _fetchLocks = new(StringComparer.Ordinal);
     private readonly ITmdbApiClient _apiClient;
     private readonly ILogger<TmdbEpisodeGroupCache> _logger;
     private readonly Func<int> _expirationHoursProvider;
@@ -45,6 +46,35 @@ public class TmdbEpisodeGroupCache : ITmdbEpisodeGroupCache
     {
         var expirationHours = _expirationHoursProvider();
 
+        if (TryGetValid(episodeGroupId, expirationHours, out var cached))
+        {
+            return cached;
+        }
+
+        var fetchLock = _fetchLocks.GetOrAdd(episodeGroupId, _ => new SemaphoreSlim(1, 1));
+        await fetchLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Double-check after acquiring the lock — another thread may have fetched already
+            if (TryGetValid(episodeGroupId, expirationHours, out cached))
+            {
+                return cached;
+            }
+
+            _logger.LogInformation(
+                "[TMDbEpisodeGroups] Cache miss for episode group {EpisodeGroupId}, fetching from TMDB",
+                episodeGroupId);
+
+            return await FetchAndStoreAsync(episodeGroupId, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            fetchLock.Release();
+        }
+    }
+
+    private bool TryGetValid(string episodeGroupId, int expirationHours, out TmdbEpisodeGroupDetails details)
+    {
         if (_cache.TryGetValue(episodeGroupId, out var entry))
         {
             var age = DateTime.UtcNow - entry.FetchedAt;
@@ -55,7 +85,8 @@ public class TmdbEpisodeGroupCache : ITmdbEpisodeGroupCache
                     episodeGroupId,
                     age.TotalHours,
                     expirationHours);
-                return entry.Details;
+                details = entry.Details;
+                return true;
             }
 
             _logger.LogInformation(
@@ -64,14 +95,9 @@ public class TmdbEpisodeGroupCache : ITmdbEpisodeGroupCache
                 age.TotalHours,
                 expirationHours);
         }
-        else
-        {
-            _logger.LogInformation(
-                "[TMDbEpisodeGroups] Cache miss for episode group {EpisodeGroupId}, fetching from TMDB",
-                episodeGroupId);
-        }
 
-        return await FetchAndStoreAsync(episodeGroupId, cancellationToken).ConfigureAwait(false);
+        details = default;
+        return false;
     }
 
     /// <inheritdoc/>

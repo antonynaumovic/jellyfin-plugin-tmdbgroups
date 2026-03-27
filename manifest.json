@@ -10,10 +10,10 @@
         "versions":  [
                          {
                              "changelog":  "- Bug fixes and improvements",
-                             "checksum":  "f67fd6fbb5b25f8f69e4b0fe2152104e",
+                             "checksum":  "f600754d574b4f5b05c17cc942897db4",
                              "sourceUrl":  "https://github.com/antonynaumovic/jellyfin-plugin-tmdbgroups/releases/download/v0.0.0.4/tmdb-episode-groups_0.0.0.4.zip",
                              "targetAbi":  "10.11.0.0",
-                             "timestamp":  "2026-03-27T20:21:26Z",
+                             "timestamp":  "2026-03-27T20:49:18Z",
                              "version":  "0.0.0.4"
                          },
                          {

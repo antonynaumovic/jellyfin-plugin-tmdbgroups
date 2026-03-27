@@ -64,19 +64,33 @@ public class TMDbEpisodeGroupImageProvider : IRemoteImageProvider, IHasOrder
     {
         var episode = (Episode)item;
 
+        _logger.LogInformation(
+            "[TMDbEpisodeGroups] GetImages called for S{Season}E{Episode} (SeriesId: {SeriesId})",
+            episode.ParentIndexNumber,
+            episode.IndexNumber,
+            episode.SeriesId);
+
         if (episode.ParentIndexNumber is null or 0 || episode.IndexNumber is null)
         {
+            _logger.LogDebug("[TMDbEpisodeGroups] GetImages: skipping specials (season 0 or null index)");
             return [];
         }
 
         var series = _libraryManager.GetItemById(episode.SeriesId) as Series;
-        var seriesTmdbId = series?.GetProviderId(MetadataProvider.Tmdb);
-        if (string.IsNullOrEmpty(seriesTmdbId))
+        if (series == null)
         {
+            _logger.LogDebug("[TMDbEpisodeGroups] GetImages: series not found for SeriesId {SeriesId}", episode.SeriesId);
             return [];
         }
 
-        var episodeGroupId = series!.GetProviderId(TmdbEpisodeGroupExternalId.EpisodeGroupProviderId);
+        var seriesTmdbId = series.GetProviderId(MetadataProvider.Tmdb);
+        if (string.IsNullOrEmpty(seriesTmdbId))
+        {
+            _logger.LogDebug("[TMDbEpisodeGroups] GetImages: series {SeriesName} has no TMDb ID", series.Name);
+            return [];
+        }
+
+        var episodeGroupId = series.GetProviderId(TmdbEpisodeGroupExternalId.EpisodeGroupProviderId);
         if (string.IsNullOrEmpty(episodeGroupId))
         {
             episodeGroupId = Plugin.Instance?.PluginConfiguration?.EpisodeGroupConfigs
@@ -85,6 +99,7 @@ public class TMDbEpisodeGroupImageProvider : IRemoteImageProvider, IHasOrder
 
         if (string.IsNullOrEmpty(episodeGroupId))
         {
+            _logger.LogDebug("[TMDbEpisodeGroups] GetImages: no episode group configured for series {SeriesName} (TMDb: {TmdbId})", series.Name, seriesTmdbId);
             return [];
         }
 
@@ -97,25 +112,37 @@ public class TMDbEpisodeGroupImageProvider : IRemoteImageProvider, IHasOrder
 
             if (seasonIdx < 1 || seasonIdx > episodeGroupDetails.Groups.Count)
             {
+                _logger.LogDebug(
+                    "[TMDbEpisodeGroups] GetImages: S{Season} out of range (group has {Count} seasons)",
+                    seasonIdx,
+                    episodeGroupDetails.Groups.Count);
                 return [];
             }
 
             var group = episodeGroupDetails.Groups[seasonIdx - 1];
             if (episodeIdx < 1 || episodeIdx > group.Episodes.Count)
             {
+                _logger.LogDebug(
+                    "[TMDbEpisodeGroups] GetImages: E{Episode} out of range for S{Season} (group has {Count} episodes)",
+                    episodeIdx,
+                    seasonIdx,
+                    group.Episodes.Count);
                 return [];
             }
 
             var tmdbEpisode = group.Episodes[episodeIdx - 1];
             if (string.IsNullOrEmpty(tmdbEpisode.StillPath))
             {
+                _logger.LogDebug("[TMDbEpisodeGroups] GetImages: no still_path for S{Season}E{Episode}", seasonIdx, episodeIdx);
                 return [];
             }
 
-            _logger.LogDebug(
-                "[TMDbEpisodeGroups] Found still image for S{Season}E{Episode}",
+            var imageUrl = TmdbImageBaseUrl + tmdbEpisode.StillPath;
+            _logger.LogInformation(
+                "[TMDbEpisodeGroups] GetImages: returning still image for S{Season}E{Episode}: {Url}",
                 seasonIdx,
-                episodeIdx);
+                episodeIdx,
+                imageUrl);
 
             return
             [
@@ -123,13 +150,13 @@ public class TMDbEpisodeGroupImageProvider : IRemoteImageProvider, IHasOrder
                 {
                     ProviderName = Name,
                     Type = ImageType.Primary,
-                    Url = TmdbImageBaseUrl + tmdbEpisode.StillPath
+                    Url = imageUrl
                 }
             ];
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TMDbEpisodeGroups] Error fetching image for S{Season}E{Episode}", episode.ParentIndexNumber, episode.IndexNumber);
+            _logger.LogError(ex, "[TMDbEpisodeGroups] GetImages: error for S{Season}E{Episode}", episode.ParentIndexNumber, episode.IndexNumber);
             return [];
         }
     }

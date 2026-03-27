@@ -196,14 +196,24 @@ public class EpisodeGroupMetadataManager
 
                     if (!string.IsNullOrEmpty(tmdbEpisode.StillPath))
                     {
+                        var imageUrl = TmdbImageBaseUrl + tmdbEpisode.StillPath;
+                        _logger.LogInformation(
+                            "[TMDbEpisodeGroups] Saving image for S{Season}E{Episode}: {Url}",
+                            groupIndex,
+                            episodeIndex,
+                            imageUrl);
                         try
                         {
                             await _providerManager.SaveImage(
                                 matchingEpisode,
-                                TmdbImageBaseUrl + tmdbEpisode.StillPath,
+                                imageUrl,
                                 ImageType.Primary,
                                 null,
                                 cancellationToken).ConfigureAwait(false);
+                            _logger.LogInformation(
+                                "[TMDbEpisodeGroups] Saved image for S{Season}E{Episode}",
+                                groupIndex,
+                                episodeIndex);
                         }
                         catch (Exception ex)
                         {
