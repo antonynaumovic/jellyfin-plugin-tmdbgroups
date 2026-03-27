@@ -22,6 +22,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ITmdbEpisodeGroupCache, TmdbEpisodeGroupCache>();
         serviceCollection.AddSingleton<EpisodeGroupMetadataManager>();
         serviceCollection.AddSingleton<IRemoteMetadataProvider<Episode, EpisodeInfo>, TMDbEpisodeGroupProvider>();
+        serviceCollection.AddSingleton<IRemoteImageProvider, TMDbEpisodeGroupImageProvider>();
         serviceCollection.AddSingleton<IExternalId, TmdbEpisodeGroupExternalId>();
     }
 }

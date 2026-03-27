@@ -24,7 +24,7 @@ $entry = [ordered]@{
     checksum  = $checksum
     sourceUrl = "https://github.com/antonynaumovic/jellyfin-plugin-tmdbgroups/releases/download/v$version/tmdb-episode-groups_$version.zip"
     targetAbi = $TargetAbi
-    timestamp = (Get-Date -Format 'yyyy-MM-ddT00:00:00Z')
+    timestamp = (Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')
     version   = $version
 }
 

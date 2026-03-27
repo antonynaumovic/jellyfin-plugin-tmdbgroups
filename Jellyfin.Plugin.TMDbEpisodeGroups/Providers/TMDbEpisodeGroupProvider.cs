@@ -7,10 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.TMDbEpisodeGroups.Configuration;
 using Jellyfin.Plugin.TMDbEpisodeGroups.Services;
-using MediaBrowser.Common.Net;
-using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
@@ -21,30 +18,29 @@ namespace Jellyfin.Plugin.TMDbEpisodeGroups.Providers;
 /// <summary>
 /// Metadata provider for episodes from TMDB episode groups.
 /// </summary>
-public class TMDbEpisodeGroupProvider : IRemoteMetadataProvider<Episode, EpisodeInfo>
+public class TMDbEpisodeGroupProvider : IRemoteMetadataProvider<Episode, EpisodeInfo>, IHasOrder
 {
     private readonly ITmdbEpisodeGroupCache _episodeGroupCache;
     private readonly ILogger<TMDbEpisodeGroupProvider> _logger;
-    private readonly ILibraryManager _libraryManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TMDbEpisodeGroupProvider"/> class.
     /// </summary>
     /// <param name="episodeGroupCache">Instance of the <see cref="ITmdbEpisodeGroupCache"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{TMDbEpisodeGroupProvider}"/> interface.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     public TMDbEpisodeGroupProvider(
         ITmdbEpisodeGroupCache episodeGroupCache,
-        ILogger<TMDbEpisodeGroupProvider> logger,
-        ILibraryManager libraryManager)
+        ILogger<TMDbEpisodeGroupProvider> logger)
     {
         _episodeGroupCache = episodeGroupCache;
         _logger = logger;
-        _libraryManager = libraryManager;
     }
 
     /// <inheritdoc/>
     public string Name => "TMDb Episode Groups";
+
+    /// <inheritdoc/>
+    public int Order => 0;
 
     /// <inheritdoc/>
     public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(EpisodeInfo searchInfo, CancellationToken cancellationToken)
@@ -103,44 +99,55 @@ public class TMDbEpisodeGroupProvider : IRemoteMetadataProvider<Episode, Episode
                 episodeGroupId,
                 cancellationToken).ConfigureAwait(false);
 
-            // Find the matching episode in the episode group
-            foreach (var group in episodeGroupDetails.Groups)
+            // Map season/episode to group position (1-indexed), same logic as EpisodeGroupMetadataManager
+            var seasonIdx = info.ParentIndexNumber!.Value;
+            var episodeIdx = info.IndexNumber.GetValueOrDefault();
+
+            if (episodeIdx < 1 || seasonIdx > episodeGroupDetails.Groups.Count)
             {
-                var tmdbEpisode = group.Episodes.FirstOrDefault(e =>
-                    e.SeasonNumber == info.ParentIndexNumber &&
-                    e.EpisodeNumber == info.IndexNumber);
-
-                if (tmdbEpisode != null)
-                {
-                    result.Item = new Episode
-                    {
-                        Name = tmdbEpisode.Name,
-                        Overview = tmdbEpisode.Overview,
-                        IndexNumber = info.IndexNumber,
-                        ParentIndexNumber = info.ParentIndexNumber
-                    };
-
-                    // Set TMDB episode ID if available
-                    if (tmdbEpisode.Id > 0)
-                    {
-                        result.Item.SetProviderId(MetadataProvider.Tmdb, tmdbEpisode.Id.ToString(CultureInfo.InvariantCulture));
-                    }
-
-                    result.HasMetadata = true;
-
-                    _logger.LogInformation(
-                        "Found episode metadata from episode group: S{Season}E{Episode} - {Name}",
-                        info.ParentIndexNumber,
-                        info.IndexNumber,
-                        tmdbEpisode.Name);
-
-                    break;
-                }
+                _logger.LogDebug(
+                    "[TMDbEpisodeGroups] S{Season}E{Episode} is out of range for episode group",
+                    seasonIdx,
+                    episodeIdx);
+                return result;
             }
+
+            var group = episodeGroupDetails.Groups[seasonIdx - 1];
+            if (episodeIdx > group.Episodes.Count)
+            {
+                _logger.LogDebug(
+                    "[TMDbEpisodeGroups] Episode {Episode} is out of range for group {Season}",
+                    episodeIdx,
+                    seasonIdx);
+                return result;
+            }
+
+            var tmdbEpisode = group.Episodes[episodeIdx - 1];
+
+            result.Item = new Episode
+            {
+                Name = tmdbEpisode.Name,
+                Overview = tmdbEpisode.Overview,
+                IndexNumber = info.IndexNumber,
+                ParentIndexNumber = info.ParentIndexNumber
+            };
+
+            if (tmdbEpisode.Id > 0)
+            {
+                result.Item.SetProviderId(MetadataProvider.Tmdb, tmdbEpisode.Id.ToString(CultureInfo.InvariantCulture));
+            }
+
+            result.HasMetadata = true;
+
+            _logger.LogInformation(
+                "[TMDbEpisodeGroups] Found metadata for S{Season}E{Episode} - {Name}",
+                info.ParentIndexNumber,
+                info.IndexNumber,
+                tmdbEpisode.Name);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching episode metadata from TMDB episode group");
+            _logger.LogError(ex, "[TMDbEpisodeGroups] Error fetching episode metadata from TMDB episode group");
         }
 
         return result;
