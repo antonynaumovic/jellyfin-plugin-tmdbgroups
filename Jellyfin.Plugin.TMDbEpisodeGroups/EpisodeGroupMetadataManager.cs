@@ -11,6 +11,7 @@ using Jellyfin.Plugin.TMDbEpisodeGroups.Services;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -21,8 +22,11 @@ namespace Jellyfin.Plugin.TMDbEpisodeGroups;
 /// </summary>
 public class EpisodeGroupMetadataManager
 {
+    private const string TmdbImageBaseUrl = "https://image.tmdb.org/t/p/original";
+
     private readonly ILibraryManager _libraryManager;
     private readonly ITmdbEpisodeGroupCache _episodeGroupCache;
+    private readonly IProviderManager _providerManager;
     private readonly ILogger<EpisodeGroupMetadataManager> _logger;
     private readonly Func<IList<EpisodeGroupConfig>> _configProvider;
 
@@ -31,12 +35,14 @@ public class EpisodeGroupMetadataManager
     /// </summary>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="episodeGroupCache">Instance of the <see cref="ITmdbEpisodeGroupCache"/> interface.</param>
+    /// <param name="providerManager">Instance of the <see cref="IProviderManager"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{EpisodeGroupMetadataManager}"/> interface.</param>
     public EpisodeGroupMetadataManager(
         ILibraryManager libraryManager,
         ITmdbEpisodeGroupCache episodeGroupCache,
+        IProviderManager providerManager,
         ILogger<EpisodeGroupMetadataManager> logger)
-        : this(libraryManager, episodeGroupCache, logger, () => Plugin.Instance?.PluginConfiguration?.EpisodeGroupConfigs ?? new List<EpisodeGroupConfig>())
+        : this(libraryManager, episodeGroupCache, providerManager, logger, () => Plugin.Instance?.PluginConfiguration?.EpisodeGroupConfigs ?? new List<EpisodeGroupConfig>())
     {
     }
 
@@ -45,16 +51,19 @@ public class EpisodeGroupMetadataManager
     /// </summary>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="episodeGroupCache">Instance of the <see cref="ITmdbEpisodeGroupCache"/> interface.</param>
+    /// <param name="providerManager">Instance of the <see cref="IProviderManager"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{EpisodeGroupMetadataManager}"/> interface.</param>
     /// <param name="configProvider">Function that provides the episode group configurations.</param>
     public EpisodeGroupMetadataManager(
         ILibraryManager libraryManager,
         ITmdbEpisodeGroupCache episodeGroupCache,
+        IProviderManager providerManager,
         ILogger<EpisodeGroupMetadataManager> logger,
         Func<IList<EpisodeGroupConfig>> configProvider)
     {
         _libraryManager = libraryManager;
         _episodeGroupCache = episodeGroupCache;
+        _providerManager = providerManager;
         _logger = logger;
         _configProvider = configProvider;
     }
@@ -183,6 +192,27 @@ public class EpisodeGroupMetadataManager
                             ItemUpdateType.MetadataEdit,
                             cancellationToken).ConfigureAwait(false);
                         updatedCount++;
+                    }
+
+                    if (!string.IsNullOrEmpty(tmdbEpisode.StillPath))
+                    {
+                        try
+                        {
+                            await _providerManager.SaveImage(
+                                matchingEpisode,
+                                TmdbImageBaseUrl + tmdbEpisode.StillPath,
+                                ImageType.Primary,
+                                null,
+                                cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "[TMDbEpisodeGroups] Failed to save image for S{Season}E{Episode}",
+                                groupIndex,
+                                episodeIndex);
+                        }
                     }
                 }
             }

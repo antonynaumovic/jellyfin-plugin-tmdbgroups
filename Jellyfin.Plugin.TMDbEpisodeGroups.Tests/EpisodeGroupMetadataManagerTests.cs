@@ -5,6 +5,7 @@ using FluentAssertions;
 using Jellyfin.Plugin.TMDbEpisodeGroups.Configuration;
 using Jellyfin.Plugin.TMDbEpisodeGroups.Services;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -15,12 +16,14 @@ public class EpisodeGroupMetadataManagerTests
 {
     private readonly Mock<ILibraryManager> _mockLibraryManager;
     private readonly Mock<ITmdbEpisodeGroupCache> _mockEpisodeGroupCache;
+    private readonly Mock<IProviderManager> _mockProviderManager;
     private readonly Mock<ILogger<EpisodeGroupMetadataManager>> _mockLogger;
 
     public EpisodeGroupMetadataManagerTests()
     {
         _mockLibraryManager = new Mock<ILibraryManager>();
         _mockEpisodeGroupCache = new Mock<ITmdbEpisodeGroupCache>();
+        _mockProviderManager = new Mock<IProviderManager>();
         _mockLogger = new Mock<ILogger<EpisodeGroupMetadataManager>>();
     }
 
@@ -33,6 +36,7 @@ public class EpisodeGroupMetadataManagerTests
         var manager = new EpisodeGroupMetadataManager(
             _mockLibraryManager.Object,
             _mockEpisodeGroupCache.Object,
+            _mockProviderManager.Object,
             _mockLogger.Object,
             () => emptyConfigs);
 
@@ -51,6 +55,7 @@ public class EpisodeGroupMetadataManagerTests
         var manager = new EpisodeGroupMetadataManager(
             _mockLibraryManager.Object,
             _mockEpisodeGroupCache.Object,
+            _mockProviderManager.Object,
             _mockLogger.Object,
             () => emptyConfigs);
 
@@ -68,6 +73,7 @@ public class EpisodeGroupMetadataManagerTests
         var manager = new EpisodeGroupMetadataManager(
             _mockLibraryManager.Object,
             _mockEpisodeGroupCache.Object,
+            _mockProviderManager.Object,
             _mockLogger.Object);
 
         // Assert
